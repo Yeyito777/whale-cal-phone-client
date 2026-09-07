@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Swift Crypto's fully qualified type name is not private key material"
+regexTarget = "secret"
+regexes = ['''^Curve25519\.Signing\.PrivateKey$''']

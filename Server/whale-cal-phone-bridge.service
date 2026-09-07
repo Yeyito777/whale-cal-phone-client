@@ -1,0 +1,13 @@
+[Unit]
+Description=Loopback-only SSH bridge to Whale Cal IPC
+After=network.target
+
+[Service]
+# Replace the example checkout path below. %h expands to the service user's home.
+ExecStart=/usr/bin/socat TCP-LISTEN:46282,bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:%h/path/to/whale-cal/config/runtime/cald.sock
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,77 @@
+name: WhaleCalPhoneClient
+options:
+  bundleIdPrefix: org.whalecal
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+packages:
+  Citadel:
+    url: https://github.com/orlandos-nl/Citadel.git
+    revision: ae8562f895de06ccb86fdb1cbb65fd99c8976e12
+  SwiftCrypto:
+    url: https://github.com/apple/swift-crypto.git
+    from: 3.15.1
+  SwiftNIO:
+    url: https://github.com/apple/swift-nio.git
+    from: 2.97.1
+  NIOSSH:
+    url: https://github.com/Wellz26/swift-nio-ssh.git
+    from: 0.3.6
+targets:
+  WhaleCalPhoneClient:
+    type: application
+    platform: iOS
+    configFiles:
+      Debug: Config/Local.xcconfig
+      Release: Config/Local.xcconfig
+    sources:
+      - path: WhaleCal
+    dependencies:
+      - package: Citadel
+      - package: SwiftCrypto
+        product: Crypto
+      - package: SwiftNIO
+        product: NIO
+      - package: NIOSSH
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(WHALE_CAL_BUNDLE_ID)
+        PRODUCT_NAME: WhaleCal
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Whale Cal
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Securely connect to your calendar computer over SSH.
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  WhaleCalUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    configFiles:
+      Debug: Config/Local.xcconfig
+      Release: Config/Local.xcconfig
+    sources:
+      - path: Tests/UI
+    dependencies:
+      - target: WhaleCalPhoneClient
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(WHALE_CAL_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: WhaleCalPhoneClient
+schemes:
+  WhaleCalPhoneClient:
+    build:
+      targets:
+        WhaleCalPhoneClient: all
+    test:
+      targets:
+        - WhaleCalUITests
