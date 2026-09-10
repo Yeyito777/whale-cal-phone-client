@@ -4,6 +4,7 @@ struct EventEditorView: View {
     let model: CalendarConnectionModel
     let date: Date
     var event: CalEvent?
+    var defaultKind = "event"
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var kind = "event"
@@ -79,7 +80,9 @@ struct EventEditorView: View {
     }
     private func load() {
         guard !loaded else { return }; loaded = true
-        calendarId = event?.calendarId ?? model.calendars.first(where: \.visible)?.id ?? model.calendars.first?.id ?? ""
+        calendarId = event?.calendarId ?? model.calendars.first(where: { model.isVisible($0.id) })?.id ?? model.calendars.first?.id ?? ""
+        kind = defaultKind
+        if defaultKind == "deadline" { timed = false }
         startDate = event.map { Dates.date($0.startDate) } ?? date
         endDate = event.map { Dates.date($0.endDate) } ?? date
         until = Dates.add(1, .year, to: startDate)

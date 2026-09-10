@@ -7,6 +7,9 @@ struct CalendarsView: View {
     @State private var error: String?
     @State private var busy = false
     @State private var editing: CalCalendar?
+    @State private var editingGroup: CalendarGroup?
+    @State private var groupName = ""
+    @State private var newGroupId = ""
 
     var body: some View {
         NavigationStack {
@@ -15,29 +18,60 @@ struct CalendarsView: View {
                     ForEach(model.calendars) { calendar in
                         HStack {
                             Button {
-                                perform(["type": "update_calendar", "id": calendar.id, "patch": ["visible": !calendar.visible]])
+                                model.toggleVisibility(calendar.id)
                             } label: {
                                 HStack {
-                                    Image(systemName: calendar.visible ? "checkmark.circle.fill" : "circle").foregroundStyle(Color(hex: calendar.color))
-                                    Text(calendar.name).foregroundStyle(.white)
+                                    Image(systemName: model.isVisible(calendar.id) ? "checkmark.circle.fill" : "circle").foregroundStyle(Color(hex: calendar.color))
+                                    VStack(alignment: .leading) {
+                                        Text(calendar.name).foregroundStyle(.white)
+                                        if let group = model.groups.first(where: { $0.id == calendar.groupId }) {
+                                            Text(group.name).font(.caption).foregroundStyle(Whale.muted)
+                                        }
+                                    }
                                 }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                             }.buttonStyle(.plain)
                             Button { editing = calendar } label: { Image(systemName: "ellipsis").padding(8) }.buttonStyle(.borderless).accessibilityLabel("Edit \(calendar.name)")
                         }
                     }
-                } header: { Text("Calendars") } footer: { Text("Visibility is shared with your terminal and other clients.") }
+                } header: { Text("Calendars") } footer: { Text("Visibility is saved on this phone for this connection. It doesn’t change the terminal or other phones.") }
                 Section("New calendar") {
                     TextField("Name", text: $name)
-                    Button("Create calendar") { perform(["type": "create_calendar", "name": name.trimmingCharacters(in: .whitespacesAndNewlines)], clearName: true) }
-                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    CalendarGroupPicker(groups: model.groups, selection: $newGroupId)
+                    Button("Create calendar") {
+                        var command: [String: Any] = ["type": "create_calendar", "name": name.trimmingCharacters(in: .whitespacesAndNewlines)]
+                        if !newGroupId.isEmpty { command["groupId"] = newGroupId }
+                        perform(command, clearName: true)
+                    }
+                        .disabled(!model.connected || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                Section {
+                    ForEach(model.groups) { group in
+                        Button { editingGroup = group } label: {
+                            HStack { Text(group.name); Spacer(); Image(systemName: "ellipsis") }
+                        }
+                    }
+                    TextField("New group name", text: $groupName)
+                    Button("Create group") {
+                        busy = true; error = nil
+                        Task {
+                            do {
+                                try await model.mutate(["type": "create_group", "name": groupName.trimmingCharacters(in: .whitespacesAndNewlines)])
+                                await model.refresh(); groupName = ""
+                            } catch { self.error = error.localizedDescription }
+                            busy = false
+                        }
+                    }.disabled(!model.connected || groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } header: { Text("Groups") } footer: {
+                    Text("Groups are shared across clients. Collapsing a group only changes this phone’s sidebar—it doesn’t hide its calendars.")
                 }
                 if let error { Section { Text(error).foregroundStyle(Whale.warning) } }
             }
-            .disabled(busy || !model.connected)
+            .disabled(busy)
             .scrollContentBackground(.hidden).background(Whale.background)
             .navigationTitle("Calendars").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $editing) { CalendarEditorView(model: model, calendar: $0) }
+            .sheet(item: $editingGroup) { CalendarGroupEditor(model: model, group: $0) }
         }.tint(Whale.accent).preferredColorScheme(.dark)
     }
     private func perform(_ command: [String: Any], clearName: Bool = false) {
@@ -56,6 +90,7 @@ private struct CalendarEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var color = ""
+    @State private var groupId = ""
     @State private var deleting = false
     @State private var busy = false
     @State private var error: String?
@@ -64,6 +99,7 @@ private struct CalendarEditorView: View {
             Form {
                 TextField("Name", text: $name)
                 TextField("Color (#rrggbb)", text: $color).autocorrectionDisabled().textInputAutocapitalization(.never)
+                CalendarGroupPicker(groups: model.groups, selection: $groupId)
                 if let error { Text(error).foregroundStyle(Whale.warning) }
                 Section { Button("Delete calendar and all its events", role: .destructive) { deleting = true } }
             }
@@ -71,9 +107,12 @@ private struct CalendarEditorView: View {
             .navigationTitle("Edit calendar").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { perform(["type": "update_calendar", "id": calendar.id, "patch": ["name": name, "color": color]]) }.disabled(busy || !model.connected || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                ToolbarItem(placement: .confirmationAction) { Button("Save") {
+                    let patch: [String: Any] = ["name": name, "color": color, "groupId": groupId.isEmpty ? NSNull() : groupId as Any]
+                    perform(["type": "update_calendar", "id": calendar.id, "patch": patch])
+                }.disabled(busy || !model.connected || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
             }
-            .onAppear { name = calendar.name; color = calendar.color }
+            .onAppear { name = calendar.name; color = calendar.color; groupId = calendar.groupId ?? "" }
             .interactiveDismissDisabled(busy)
             .confirmationDialog("Delete \(calendar.name) and every event in it? This cannot be undone.", isPresented: $deleting, titleVisibility: .visible) {
                 Button("Delete calendar and events", role: .destructive) { perform(["type": "delete_calendar", "id": calendar.id]) }

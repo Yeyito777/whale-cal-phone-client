@@ -5,6 +5,7 @@ struct CalendarHomeView: View {
     @State private var mode = "Month"
     @State private var query = ""
     @State private var showCalendars = false
+    @State private var showCalendarManager = false
     @State private var showSettings = false
     @State private var showNew = false
     @State private var selectedItem: Occurrence?
@@ -14,6 +15,7 @@ struct CalendarHomeView: View {
 
     var body: some View {
         NavigationStack {
+            CalendarDrawerHost(model: model, isPresented: $showCalendars, gesturesEnabled: !searchFocused, onManage: { showCalendarManager = true }) {
             VStack(spacing: 0) {
                 header
                 if !model.connected || model.connectionError != nil {
@@ -25,11 +27,15 @@ struct CalendarHomeView: View {
                     }.font(.caption).foregroundStyle(Whale.warning).padding(.horizontal).padding(.vertical, 8)
                 }
                 HStack(spacing: 8) {
-                    Button { move(-1) } label: { Image(systemName: "chevron.left").frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Previous \(mode.lowercased())")
+                    if mode != "Deadlines" {
+                        Button { move(-1) } label: { Image(systemName: "chevron.left").frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Previous \(mode.lowercased())")
+                    }
                     Picker("View", selection: $mode) {
-                        ForEach(["Month", "Week", "Agenda"], id: \.self) { Text($0) }
+                        ForEach(["Month", "Week", "Agenda", "Deadlines"], id: \.self) { Text($0) }
                     }.pickerStyle(.segmented)
-                    Button { move(1) } label: { Image(systemName: "chevron.right").frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Next \(mode.lowercased())")
+                    if mode != "Deadlines" {
+                        Button { move(1) } label: { Image(systemName: "chevron.right").frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Next \(mode.lowercased())")
+                    }
                 }.padding(.horizontal, 12).padding(.bottom, 10)
                 if showSearch {
                     HStack {
@@ -40,6 +46,9 @@ struct CalendarHomeView: View {
                     }.padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 4)
                         .background(Whale.surface, in: RoundedRectangle(cornerRadius: 8)).padding(.horizontal).padding(.bottom, 8)
                 }
+                if mode == "Deadlines" {
+                    DeadlineChecklistView(model: model, query: query)
+                } else {
                 ScrollView {
                     VStack(spacing: 16) {
                         if mode != "Agenda" { calendarGrid }
@@ -49,12 +58,14 @@ struct CalendarHomeView: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .refreshable { await model.refresh() }
+                }
+            }
             }
             .background(Whale.background)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showCalendars) { CalendarsView(model: model) }
+            .sheet(isPresented: $showCalendarManager) { CalendarsView(model: model) }
             .sheet(isPresented: $showSettings) { ConnectionSettingsView(model: model) }
-            .sheet(isPresented: $showNew) { EventEditorView(model: model, date: model.selectedDate) }
+            .sheet(isPresented: $showNew) { EventEditorView(model: model, date: mode == "Deadlines" ? Date() : model.selectedDate, defaultKind: mode == "Deadlines" ? "deadline" : "event") }
             .sheet(item: $selectedItem) { EventDetailView(model: model, original: $0) }
             .sheet(isPresented: $showDay) { DayView(model: model) }
             .alert("Calendar", isPresented: Binding(get: { model.actionError != nil }, set: { if !$0 { model.actionError = nil } })) {
@@ -62,19 +73,22 @@ struct CalendarHomeView: View {
             } message: { Text(model.actionError ?? "") }
             .onChange(of: Dates.key(Dates.monthStart(model.selectedDate))) { _, _ in model.scheduleRefresh() }
             .onChange(of: showSearch) { _, visible in searchFocused = visible }
-        }
+            .onChange(of: showCalendars) { _, visible in if visible { searchFocused = false } }
+        }.preferredColorScheme(.dark)
     }
 
     private var header: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.selectedDate.formatted(.dateTime.month(.wide))).font(.system(size: 28, weight: .semibold))
+                Text(mode == "Deadlines" ? "Deadlines" : model.selectedDate.formatted(.dateTime.month(.wide))).font(.system(size: 28, weight: .semibold))
                     .lineLimit(1).minimumScaleFactor(0.8).accessibilityIdentifier("Month heading")
-                Text(model.selectedDate.formatted(.dateTime.year())).font(.subheadline).foregroundStyle(Whale.muted)
+                if mode != "Deadlines" { Text(model.selectedDate.formatted(.dateTime.year())).font(.subheadline).foregroundStyle(Whale.muted) }
             }
             Spacer(minLength: 0)
-            Button { model.selectedDate = Date() } label: { Text("Today").font(.subheadline).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
-            Button { showNew = true } label: { Image(systemName: "plus").font(.title3).frame(width: 44, height: 44).contentShape(Rectangle()) }.disabled(!model.connected).accessibilityLabel("New event")
+            if mode != "Deadlines" {
+                Button { model.selectedDate = Date() } label: { Text("Today").font(.subheadline).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
+            }
+            Button { showNew = true } label: { Image(systemName: "plus").font(.title3).frame(width: 44, height: 44).contentShape(Rectangle()) }.disabled(!model.connected).accessibilityLabel(mode == "Deadlines" ? "New deadline" : "New event")
             Menu {
                 Button { showCalendars = true } label: { Label("Calendars", systemImage: "calendar") }
                 Button {
@@ -148,10 +162,19 @@ struct CalendarHomeView: View {
                 }
                 .frame(minHeight: 44).contentShape(Rectangle())
             }.accessibilityIdentifier("Day details").accessibilityHint("Open day schedule")
-            let items = model.items(on: model.selectedDate, query: query)
-            if items.isEmpty { emptyDay(model.selectedDate) }
-            ForEach(items) { item in
-                Button { selectedItem = item } label: { EventRow(item: item, calendar: model.calendar(item.event.calendarId)) }.buttonStyle(.plain)
+            let day = Dates.key(model.selectedDate)
+            if day < model.loadedFrom || day > model.loadedTo {
+                emptyDay(model.selectedDate)
+            } else if query.isEmpty {
+                TimelineView(.periodic(from: .now, by: 30)) { timeline in
+                    DayTimelineView(model: model, date: model.selectedDate, now: timeline.date) { selectedItem = $0 }
+                }
+            } else {
+                let items = model.items(on: model.selectedDate, query: query)
+                if items.isEmpty { emptyDay(model.selectedDate) }
+                ForEach(items) { item in
+                    Button { selectedItem = item } label: { EventRow(item: item, calendar: model.calendar(item.event.calendarId)) }.buttonStyle(.plain)
+                }
             }
         }.padding(.top, 6)
     }

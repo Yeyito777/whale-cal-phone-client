@@ -4,23 +4,31 @@ A native SwiftUI iPhone client for [Whale Cal](https://github.com/Yeyito777/whal
 
 ## Features
 
-- Compact month-first interface with month, week and agenda views.
-- Day schedules with free-time gaps, overlapping/overnight reservations and live Now markers.
+- Compact month-first interface with month, week, agenda and deadline-checklist views.
+- Dedicated Pending / Completed / All deadline filters, overdue/today/tomorrow sections, readable due dates and notes. All one-off deadlines remain available; recurring deadlines include their past occurrences and the next 12 months.
+- Explicit, scoped bulk completion/reopening of selected deadlines, with confirmation, per-occurrence recurrence handling and partial-failure reporting.
+- Full chronological day schedules, with earlier entries always visible—no collapsed sections or oversized overview card.
+- Parallel, calendar-colored event cards on a scrollable day timeline, with exact shared time boundaries, compressed empty stretches and a subtle current-time line. Dense overlaps scroll horizontally instead of squeezing away titles.
+- Completed occurrences stay as muted history but release their reservation. Maximal free spans are green, unboxed text—even alongside completed cards. Reopening reserves the time again.
+- Event details link to directly overlapping unfinished reservations and show their exact shared time. All-day items, deadlines and unknown durations do not block availability.
 - Events and deadlines, multiline notes, locations, optional durations and recurring series.
 - Create, edit, delete, and complete/reopen individual recurring occurrences.
-- Calendar management, colors and shared visibility filters.
+- Calendar management, colors and persistent calendar groups. Create/rename/delete groups, assign or ungroup calendars; deleting a group preserves its calendars and events.
+- Calendar visibility filters are local to this phone and SSH source, persist across launches and work offline. They do not modify the terminal or other phones. Canonical server visibility flags are not used as phone filters.
+- Locally remembered collapsible groups in the drawer. Collapsing never changes calendar visibility.
+- Swipe right for the left-side calendar drawer; tap to select/deselect calendars, then swipe left or tap outside to dismiss.
 - Search and connection details tucked into the overflow menu; no persistent statusline or connection badge.
 - Automatic SSH connection, reconnect/backoff, heartbeat and live updates from other clients.
 - Protected read-only offline snapshots. Changes are never silently queued or automatically retried.
 
-Dates and times use the daemon's floating local wall-clock semantics, without timezone conversion. Weeks start on Monday. Week view is a week strip and selected-day agenda, not a seven-column hourly grid. Agenda/search cover the displayed range rather than all history. Editing or deleting a recurring item affects its whole series; completion affects only the selected occurrence.
+Dates and times use the daemon's floating local wall-clock semantics, without timezone conversion. Weeks start on Monday. Week view is a week strip and selected-day timeline, not a seven-column hourly grid. Agenda/search cover the displayed range; deadline-checklist search covers its full checklist. Editing or deleting a recurring item affects its whole series; completion affects only the selected occurrence. Snapshot-based local recurrence expansion is parity-tested against the real daemon, including month-end/leap-day clamping and occurrence IDs.
 
 ## Requirements
 
 - Xcode 16.2 or later, Swift 6, iOS 17 or later.
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 - An Apple Development signing team and a paired iPhone in Developer Mode for installation.
-- An SSH-accessible computer running a compatible Whale Cal daemon and a loopback-only TCP-to-Unix-socket bridge.
+- An SSH-accessible computer running a Whale Cal daemon with snapshot (`bootstrap`), completion and calendar-group IPC, plus a loopback-only TCP-to-Unix-socket bridge.
 
 ## Local configuration
 
