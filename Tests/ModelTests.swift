@@ -180,8 +180,27 @@ enum ModelTests {
         check(CalendarDrawerInteraction.settledOpen(progress: 0.8, velocity: 0, width: 320), "short left drag stays open")
         check(!CalendarDrawerInteraction.settledOpen(progress: 0.65, velocity: -500, width: 320), "left flick dismisses drawer")
         check(CalendarDrawerInteraction.dragProgress(start: 0.4, translation: 32, width: 0) == 0, "zero-width layout is safe")
+        let release = CalendarDrawerInteraction.settleMotion(distance: 150, velocity: 650)
+        check(abs(3 * release.firstControlY * 150 / release.duration - 650) < 0.001, "settling preserves finger release speed")
+        let closing = CalendarDrawerInteraction.settleMotion(distance: -150, velocity: -650)
+        check(closing.duration == release.duration && closing.firstControlY == release.firstControlY, "closing and opening use symmetric timing")
+        check(CalendarDrawerInteraction.settleMotion(distance: 100, velocity: 0).firstControlY == 0, "stationary release starts without a speed jump")
+        check(CalendarDrawerInteraction.settleMotion(distance: -100, velocity: 100).firstControlY == 0, "cancelled short pull returns without overshoot")
+        check(CalendarDrawerInteraction.settleMotion(distance: 0, velocity: 100).duration == 0, "no remaining travel needs no animation")
+        for distance in [1.0, 30, 160, 320] {
+            for velocity in [0.0, 100, 800, 4000] {
+                let motion = CalendarDrawerInteraction.settleMotion(distance: distance, velocity: velocity)
+                check(motion.duration > 0 && motion.duration <= 0.28 && (0...1).contains(motion.firstControlY), "settle curve is bounded even for fast flicks near the edge")
+            }
+        }
         let updated = try JSONDecoder().decode(DaemonMessage.self, from: Data("{\"type\":\"calendar_updated\",\"calendar\":{\"id\":\"c\",\"name\":\"Test\",\"color\":\"#1d9bf0\",\"visible\":false},\"revision\":4}".utf8))
         check(updated.calendar?.visible == false, "acknowledged visibility decodes for immediate drawer state")
+        check(CalendarThemeName(savedValue: nil) == .dark, "fresh installs default to Dark")
+        check(CalendarThemeName(savedValue: "unknown") == .dark, "unknown stored theme falls back to Dark")
+        check(CalendarThemeName.allCases.map(\.rawValue) == ["dark", "whale", "cerberus", "tonikawa"], "four requested themes in display order")
+        for theme in CalendarThemeName.allCases {
+            check(CalendarThemeName(savedValue: theme.rawValue) == theme, "saved theme round-trips")
+        }
         print("PASS: \(checks) model / scheduling / protocol checks")
     }
 }

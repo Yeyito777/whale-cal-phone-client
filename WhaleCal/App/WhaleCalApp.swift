@@ -3,10 +3,13 @@ import SwiftUI
 @main
 struct WhaleCalApp: App {
     @State private var model = CalendarConnectionModel()
+    @AppStorage(CalendarThemeName.storageKey) private var themeSelection = CalendarThemeName.dark.rawValue
+    private var theme: WhalePalette { CalendarThemeName(savedValue: themeSelection).palette }
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
+            Group {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--ui-test-concurrency") {
                 ConcurrencyPreview()
@@ -16,13 +19,18 @@ struct WhaleCalApp: App {
             #else
             calendar
             #endif
+            }
+            .environment(\.whaleTheme, theme)
+            .foregroundStyle(theme.text)
+            .tint(theme.accent)
+            .preferredColorScheme(.dark)
         }
     }
 
     private var calendar: some View {
             CalendarHomeView(model: model)
                 .preferredColorScheme(.dark)
-                .tint(Whale.accent)
+                .tint(theme.accent)
                 .task { model.start() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { model.start() }
@@ -76,7 +84,8 @@ private struct ConcurrencyPreview: View {
     }()
 
     var body: some View {
-        if ProcessInfo.processInfo.arguments.contains("--ui-test-deadlines") { CalendarHomeView(model: model) }
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-editor") { EventEditorView(model: model, date: model.selectedDate) }
+        else if ProcessInfo.processInfo.arguments.contains("--ui-test-deadlines") { CalendarHomeView(model: model) }
         else { DayView(model: model) }
     }
 }

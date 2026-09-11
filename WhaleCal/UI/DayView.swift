@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DayView: View {
+    @Environment(\.whaleTheme) private var theme
     @Bindable var model: CalendarConnectionModel
     @Environment(\.dismiss) private var dismiss
     @State private var selection: Occurrence?
@@ -10,45 +11,43 @@ struct DayView: View {
 
     var body: some View {
         CalendarDrawerHost(model: model, isPresented: $showCalendars, onManage: { showCalendarManager = true }) {
-        NavigationStack {
-            TimelineView(.periodic(from: .now, by: 30)) { timeline in
-                let day = Dates.key(model.selectedDate)
-                if day < model.loadedFrom || day > model.loadedTo {
-                    ContentUnavailableView(model.connected ? "Loading day…" : "This date isn’t cached", systemImage: "calendar", description: Text("Connect to load this schedule."))
-                } else {
-                    VStack(spacing: 12) {
-                        HStack {
-                            Button { model.selectedDate = Dates.add(-1, to: model.selectedDate) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Previous day")
-                            Spacer()
-                            VStack(spacing: 4) {
-                                Text(model.selectedDate.formatted(.dateTime.weekday(.wide))).font(.title2.weight(.semibold))
-                                Text(model.selectedDate.formatted(date: .abbreviated, time: .omitted)).font(.caption).foregroundStyle(Whale.muted)
-                            }
-                            Spacer()
-                            Button { model.selectedDate = Dates.add(1, to: model.selectedDate) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Next day")
-                        }.padding(.horizontal)
+            NavigationStack {
+                VStack(spacing: 0) {
+                    WhalePageHeader(title: "Day schedule", onClose: { dismiss() }, actionSymbol: "plus", actionEnabled: model.connected, onAction: { showNew = true })
+                    HStack {
+                        Text(model.selectedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))
+                            .font(.system(size: 17, weight: .medium))
+                        Spacer()
+                        Button { model.selectedDate = Dates.add(-1, to: model.selectedDate) } label: {
+                            Image(systemName: "chevron.left").font(.system(size: 13)).frame(width: 44, height: 44).contentShape(Rectangle())
+                        }.accessibilityLabel("Previous day")
+                        Button { model.selectedDate = Dates.add(1, to: model.selectedDate) } label: {
+                            Image(systemName: "chevron.right").font(.system(size: 13)).frame(width: 44, height: 44).contentShape(Rectangle())
+                        }.accessibilityLabel("Next day")
+                    }.buttonStyle(.plain).padding(.leading, 20).padding(.trailing, 8).padding(.vertical, 4)
+                    TimelineView(.periodic(from: .now, by: 30)) { timeline in
+                        let day = Dates.key(model.selectedDate)
                         ScrollView {
-                            DayTimelineView(model: model, date: model.selectedDate, now: timeline.date) { selection = $0 }
-                                .padding(.horizontal).padding(.bottom, 20)
+                            if day < model.loadedFrom || day > model.loadedTo {
+                                Text(model.connected ? "Loading day…" : "Connect to load this date.").font(.subheadline).foregroundStyle(theme.muted).padding(20)
+                            } else {
+                                DayTimelineView(model: model, date: model.selectedDate, now: timeline.date) { selection = $0 }
+                                    .padding(.horizontal, 20).padding(.bottom, 24)
+                            }
                         }
-                    }.padding(.top, 8).background(Whale.background)
-                }
+                    }
+                }.background(theme.background).toolbar(.hidden, for: .navigationBar)
+                    .sheet(item: $selection) { EventDetailView(model: model, original: $0) }
+                    .sheet(isPresented: $showNew) { EventEditorView(model: model, date: model.selectedDate) }
             }
-            .navigationTitle("Day schedule").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) { Button { showNew = true } label: { Image(systemName: "plus") }.disabled(!model.connected) }
-            }
-            .sheet(item: $selection) { EventDetailView(model: model, original: $0) }
-            .sheet(isPresented: $showNew) { EventEditorView(model: model, date: model.selectedDate) }
-        }
         }
         .sheet(isPresented: $showCalendarManager) { CalendarsView(model: model) }
-        .tint(Whale.accent).preferredColorScheme(.dark)
+        .tint(theme.accent).preferredColorScheme(.dark)
     }
 }
 
 struct EventDetailView: View {
+    @Environment(\.whaleTheme) private var theme
     @Bindable var model: CalendarConnectionModel
     let original: Occurrence
     var embedded = false
@@ -66,85 +65,99 @@ struct EventDetailView: View {
         Group {
             if embedded { details }
             else { NavigationStack { details } }
-        }.tint(Whale.accent).preferredColorScheme(.dark)
+        }.tint(theme.accent).preferredColorScheme(.dark)
     }
 
     private var details: some View {
-            List {
-                Section {
+        VStack(spacing: 0) {
+            WhalePageHeader(title: "Details", closeLabel: embedded ? "Back" : "Done", onClose: { dismiss() }, actionTitle: "Edit", actionEnabled: model.connected && !busy, onAction: { editing = true })
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Label(item.event.isDeadline ? "DEADLINE" : "EVENT", systemImage: item.event.isDeadline ? "diamond.fill" : "calendar")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Whale.accent)
-                        Text(item.event.title).font(.title2.weight(.semibold)).strikethrough(item.isComplete)
-                        if item.event.isDeadline {
-                            Text("Due \(Dates.date(item.startDate).formatted(date: .abbreviated, time: .omitted))\(item.event.startTime.map { " · " + $0 } ?? "")")
-                            Text(item.isComplete ? "Completed" : item.isOverdue(at: Date()) ? "Overdue" : "Pending")
-                                .foregroundStyle(item.isOverdue(at: Date()) ? Whale.warning : Whale.muted)
-                            if item.event.startTime == nil { Text("No time specified").font(.caption).foregroundStyle(Whale.muted) }
-                        } else {
-                            Text(item.event.timeLabel).font(.system(.body, design: .monospaced))
-                            Text(item.startDate == item.endDate ? Dates.date(item.startDate).formatted(date: .abbreviated, time: .omitted) : "\(item.startDate) → \(item.endDate)").foregroundStyle(Whale.muted)
+                        HStack(spacing: 6) {
+                            if let calendar = model.calendar(item.event.calendarId) {
+                                Circle().fill(Color(hex: calendar.color)).frame(width: 6, height: 6)
+                                Text(calendar.name)
+                                Text("·")
+                            }
+                            Text(item.event.isDeadline ? "Deadline" : "Event")
+                            if item.isComplete { Text("· Completed") }
+                        }.font(.system(size: 12)).foregroundStyle(theme.muted)
+                        Text(item.event.title).font(.system(size: 25, weight: .medium)).lineSpacing(3)
+                            .strikethrough(item.isComplete).fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 5) {
+                            if item.event.isDeadline {
+                                Text("Due \(Dates.date(item.startDate).formatted(date: .abbreviated, time: .omitted))\(item.event.startTime.map { " · " + $0 } ?? " · Date only")")
+                                if item.isOverdue(at: Date()) { Text("Overdue").foregroundStyle(theme.warning) }
+                            } else {
+                                Text(item.startDate == item.endDate ? Dates.date(item.startDate).formatted(date: .abbreviated, time: .omitted) : "\(Dates.date(item.startDate).formatted(date: .abbreviated, time: .omitted)) – \(Dates.date(item.endDate).formatted(date: .abbreviated, time: .omitted))")
+                                Text(item.event.timeLabel).monospacedDigit()
+                            }
+                        }.font(.subheadline).foregroundStyle(theme.muted)
+                    }
+                    Rectangle().fill(theme.line).frame(height: 1)
+                    if let location = item.event.location, !location.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            WhaleSectionLabel(text: "Location")
+                            Text(location).font(.callout).textSelection(.enabled)
                         }
-                    }.padding(.vertical, 8)
-                }
-                if let calendar = model.calendar(item.event.calendarId) {
-                    Section { Label { Text(calendar.name) } icon: { Circle().fill(Color(hex: calendar.color)).frame(width: 10, height: 10) } }
-                }
-                if !concurrent.isEmpty {
-                    Section {
-                        ForEach(concurrent) { overlap in
-                            NavigationLink {
-                                EventDetailView(model: model, original: overlap.item, embedded: true)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(overlap.item.event.title).font(.body.weight(.medium)).strikethrough(overlap.item.isComplete)
-                                    if let calendar = model.calendar(overlap.item.event.calendarId) {
-                                        Label { Text(calendar.name) } icon: {
-                                            Circle().fill(Color(hex: calendar.color)).frame(width: 7, height: 7)
-                                        }.font(.caption).foregroundStyle(Whale.muted)
-                                    }
-                                    Text("Together \(overlapLabel(overlap))").font(.caption).foregroundStyle(Whale.accent)
-                                }.padding(.vertical, 4)
+                    }
+                    if let notes = item.event.notes, !notes.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            WhaleSectionLabel(text: "Notes")
+                            Text(notes).font(.callout).lineSpacing(5).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if !concurrent.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            WhaleSectionLabel(text: "At the same time")
+                            ForEach(concurrent) { overlap in
+                                NavigationLink {
+                                    EventDetailView(model: model, original: overlap.item, embedded: true)
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Text(overlap.item.event.title).font(.callout).foregroundStyle(.primary)
+                                            Text(overlapLabel(overlap)).font(.caption).foregroundStyle(theme.muted)
+                                        }
+                                        Spacer()
+                                        Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(theme.muted)
+                                    }.frame(minHeight: 44).contentShape(Rectangle())
+                                }.buttonStyle(.plain)
                             }
                         }
-                    } header: {
-                        Text("At the same time")
-                    } footer: {
-                        Text(model.connected ? "In visible calendars. Overlapping doesn’t necessarily mean a conflict." : "Based on the saved schedule, in visible calendars.")
                     }
-                }
-                if let rule = item.event.recurrence {
-                    Section("Recurrence") {
-                        Text("Every \(rule.interval) · \(rule.frequency)")
-                        if let until = rule.until { Text("Through \(until)") }
-                        if let count = rule.count { Text("\(count) occurrences") }
-                        Text("Completion applies only to the \(item.startDate) occurrence. Editing or deleting affects the whole series.").font(.caption).foregroundStyle(Whale.muted)
-                    }
-                }
-                if let location = item.event.location, !location.isEmpty { Section("Location") { Text(location).textSelection(.enabled) } }
-                if let notes = item.event.notes, !notes.isEmpty { Section("Notes") { Text(notes).textSelection(.enabled) } }
-                if let error { Section { Text(error).foregroundStyle(Whale.warning) } }
-                Section {
-                    Button {
-                        busy = true
-                        Task {
-                            await model.toggleComplete(item)
-                            await model.refresh()
-                            error = model.actionError
-                            model.actionError = nil
-                            busy = false
+                    if let rule = item.event.recurrence {
+                        VStack(alignment: .leading, spacing: 8) {
+                            WhaleSectionLabel(text: "Repeats")
+                            Text(recurrenceDescription(rule)).font(.callout)
+                            if let until = rule.until { Text("Through \(Dates.date(until).formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(theme.muted) }
+                            if let count = rule.count { Text("\(count) occurrences").font(.caption).foregroundStyle(theme.muted) }
+                            Text("Completion changes this occurrence. Edits and deletion affect the series.").font(.caption).foregroundStyle(theme.muted)
                         }
-                    } label: { Label(item.isComplete ? "Mark unfinished" : "Mark complete", systemImage: item.isComplete ? "arrow.uturn.backward" : "checkmark.circle") }
-                    Button { editing = true } label: { Label(item.event.recurrence == nil ? "Edit" : "Edit series", systemImage: "pencil") }
-                    Button(role: .destructive) { deleting = true } label: { Label(item.event.recurrence == nil ? "Delete event" : "Delete entire series", systemImage: "trash") }
-                }.disabled(!model.connected || busy)
-            }
-            .scrollContentBackground(.hidden).background(Whale.background)
-            .navigationTitle("Details").navigationBarTitleDisplayMode(.inline)
-            .accessibilityIdentifier("Event details \(item.id)")
-            .toolbar {
-                if !embedded { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-            }
+                    }
+                    if let error { Text(error).font(.caption).foregroundStyle(theme.warning) }
+                    HStack {
+                        Button {
+                            busy = true
+                            Task {
+                                await model.toggleComplete(item)
+                                await model.refresh()
+                                error = model.actionError; model.actionError = nil; busy = false
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: item.isComplete ? "arrow.uturn.backward" : "checkmark")
+                                Text(item.isComplete ? "Reopen" : "Mark complete")
+                            }.frame(minHeight: 44).contentShape(Rectangle())
+                        }
+                        Spacer()
+                        Button("Delete", role: .destructive) { deleting = true }.foregroundStyle(theme.muted).frame(minHeight: 44)
+                    }.buttonStyle(.plain).font(.system(size: 14)).disabled(!model.connected || busy)
+                        .padding(.top, 8).overlay(alignment: .top) { Rectangle().fill(theme.line).frame(height: 1) }
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
+            }.accessibilityElement(children: .contain).accessibilityIdentifier("Event details \(item.id)")
+        }.background(theme.background).toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $editing) { EventEditorView(model: model, date: Dates.date(item.startDate), event: item.event) }
             .confirmationDialog(item.event.recurrence == nil ? "Delete this item?" : "Delete every occurrence in this series?", isPresented: $deleting, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
@@ -157,9 +170,13 @@ struct EventDetailView: View {
             }
     }
 
+    private func recurrenceDescription(_ rule: RecurrenceRule) -> String {
+        if rule.interval == 1 { return rule.frequency.capitalized }
+        let unit = ["daily": "days", "weekly": "weeks", "monthly": "months", "yearly": "years"][rule.frequency] ?? rule.frequency
+        return "Every \(rule.interval) \(unit)"
+    }
     private func overlapLabel(_ overlap: ConcurrentOccurrence) -> String {
-        let sameDay = Dates.key(overlap.start) == Dates.key(overlap.end)
-        if sameDay, Dates.key(overlap.start) == item.startDate {
+        if Dates.key(overlap.start) == Dates.key(overlap.end), Dates.key(overlap.start) == item.startDate {
             return "\(overlap.start.formatted(date: .omitted, time: .shortened))–\(overlap.end.formatted(date: .omitted, time: .shortened))"
         }
         return "\(overlap.start.formatted(date: .abbreviated, time: .shortened)) – \(overlap.end.formatted(date: .abbreviated, time: .shortened))"

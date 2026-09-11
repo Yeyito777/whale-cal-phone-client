@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct EventEditorView: View {
+    @Environment(\.whaleTheme) private var theme
     let model: CalendarConnectionModel
     let date: Date
     var event: CalEvent?
@@ -28,10 +29,11 @@ struct EventEditorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            List {
+                Group {
                 Section {
                     TextField("Title", text: $title)
-                    Picker("Type", selection: $kind) { Text("Event").tag("event"); Text("Deadline").tag("deadline") }.pickerStyle(.segmented)
+                    Picker("Type", selection: $kind) { Text("Event").tag("event"); Text("Deadline").tag("deadline") }.pickerStyle(.menu)
                     Picker("Calendar", selection: $calendarId) { ForEach(model.calendars) { Text($0.name).tag($0.id) } }
                 }
                 Section(kind == "deadline" ? "Due" : "Schedule") {
@@ -56,19 +58,17 @@ struct EventEditorView: View {
                         if recurrenceEnd == "until" || recurrenceEnd == "both" { DatePicker("Last start date", selection: $until, in: Dates.calendar.startOfDay(for: startDate)..., displayedComponents: .date) }
                         if recurrenceEnd == "count" || recurrenceEnd == "both" { Stepper("\(count) occurrences", value: $count, in: 1...10000) }
                     }
-                    if event?.recurrence != nil { Text("You are editing the entire series, starting \(event!.startDate).").font(.caption).foregroundStyle(Whale.warning) }
+                    if event?.recurrence != nil { Text("You are editing the entire series, starting \(event!.startDate).").font(.caption).foregroundStyle(theme.warning) }
                 }
                 Section("Location") { TextField("Optional location", text: $location) }
                 Section("Notes") { TextEditor(text: $notes).frame(minHeight: 120) }
-                if let error { Section { Text(error).foregroundStyle(Whale.warning) } }
+                if let error { Section { Text(error).foregroundStyle(theme.warning) } }
+                }.listRowBackground(theme.background).listRowSeparatorTint(theme.line)
             }
-            .scrollContentBackground(.hidden).background(Whale.background)
-            .navigationTitle(event == nil ? "New item" : "Edit item").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "Saving…" : "Save") { save() }.disabled(saving || !model.connected || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || calendarId.isEmpty)
-                }
+            .listStyle(.plain).font(.callout).scrollContentBackground(.hidden).background(theme.background).disabled(saving)
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                WhalePageHeader(title: event == nil ? "New item" : "Edit item", closeLabel: "Cancel", onClose: { dismiss() }, closeEnabled: !saving, actionTitle: saving ? "Saving…" : "Save", actionEnabled: !saving && model.connected && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !calendarId.isEmpty, onAction: { save() })
             }
             .interactiveDismissDisabled(saving)
             .onAppear { load() }
@@ -76,7 +76,7 @@ struct EventEditorView: View {
                 if Dates.key(endDate) == Dates.key(old) || endDate < new { endDate = new }
                 if until < new { until = new }
             }
-        }.tint(Whale.accent).preferredColorScheme(.dark)
+        }.tint(theme.accent).preferredColorScheme(.dark)
     }
     private func load() {
         guard !loaded else { return }; loaded = true

@@ -5,6 +5,8 @@ A native SwiftUI iPhone client for [Whale Cal](https://github.com/Yeyito777/whal
 ## Features
 
 - Compact month-first interface with month, week, agenda and deadline-checklist views.
+- Restrained interface with text navigation, a single deadline filter menu, flat detail pages and consistent plain headers. Native controls are reserved for inputs, menus and confirmations rather than wrapping content in oversized panels.
+- Sidebar → Theme switches between Dark (default) and Exocortex's Whale, Cerberus and Tonikawa palettes. Selection applies immediately across the calendar, drawer and sheets, persists locally, and leaves event colors and the SSH connection unchanged. Muted palette colors are lifted for small-label readability.
 - Dedicated Pending / Completed / All deadline filters, overdue/today/tomorrow sections, readable due dates and notes. All one-off deadlines remain available; recurring deadlines include their past occurrences and the next 12 months.
 - Explicit, scoped bulk completion/reopening of selected deadlines, with confirmation, per-occurrence recurrence handling and partial-failure reporting.
 - Full chronological day schedules, with earlier entries always visible—no collapsed sections or oversized overview card.

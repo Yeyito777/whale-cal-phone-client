@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DeadlineChecklistView: View {
+    @Environment(\.whaleTheme) private var theme
     let model: CalendarConnectionModel
     var query = ""
     @State private var filter = "Pending"
@@ -20,50 +21,59 @@ struct DeadlineChecklistView: View {
         visible.filter { filter == "All" || $0.isComplete == (filter == "Completed") }
     }
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             HStack {
-                Picker("Deadline filter", selection: $filter) {
-                    Text("Pending \(visible.filter { !$0.isComplete }.count)").tag("Pending")
-                    Text("Completed \(visible.filter(\.isComplete).count)").tag("Completed")
-                    Text("All").tag("All")
-                }.pickerStyle(.segmented).accessibilityIdentifier("Deadline filter").disabled(busy)
-            }.padding(.horizontal)
-            HStack {
-                Button(selecting ? "Cancel selection" : "Select") { selecting.toggle(); selected = [] }
-                Spacer()
                 if selecting {
-                    Text("\(selected.count) selected").font(.caption).foregroundStyle(Whale.muted)
-                    Button("Select shown") { selected = Set(displayed.map(\.id)) }
+                    Text("\(selected.count) selected").foregroundStyle(theme.muted)
+                } else {
+                    Menu {
+                        Button("Pending") { filter = "Pending" }
+                        Button("Completed") { filter = "Completed" }
+                        Button("All") { filter = "All" }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(filter).foregroundStyle(.primary)
+                            Text("\(displayed.count)").foregroundStyle(theme.muted).monospacedDigit()
+                            Image(systemName: "chevron.down").font(.system(size: 10)).foregroundStyle(theme.muted)
+                        }.frame(minHeight: 44).contentShape(Rectangle())
+                    }.accessibilityIdentifier("Deadline filter")
                 }
-            }.font(.subheadline).padding(.horizontal).frame(minHeight: 36).disabled(busy)
+                Spacer()
+                if selecting { Button("Select shown") { selected = Set(displayed.map(\.id)) }.frame(minHeight: 44) }
+                Button(selecting ? "Cancel selection" : "Select") { selecting.toggle(); selected = [] }.frame(minHeight: 44)
+            }.buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(theme.muted).padding(.horizontal, 20).disabled(busy)
+            if let error { Text(error).font(.caption).foregroundStyle(theme.warning).padding(.horizontal) }
+            if busy { ProgressView().accessibilityLabel("Updating selected deadlines") }
+            TimelineView(.periodic(from: .now, by: 30)) { timeline in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        if !model.deadlinesLoaded {
+                            Text("Connect to load the full deadline checklist.").foregroundStyle(theme.muted)
+                        } else if displayed.isEmpty {
+                            Text("No \(filter == "All" ? "" : filter.lowercased() + " ")deadlines in this view.").foregroundStyle(theme.muted)
+                        }
+                        let groups = sections(now: timeline.date)
+                        ForEach(groups, id: \.title) { section in
+                            Text(section.title).font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(section.title == "Overdue" ? theme.warning : theme.muted).padding(.top, 18).padding(.bottom, 5)
+                            ForEach(section.items) { item in row(item, now: timeline.date) }
+                        }
+                        if visible.contains(where: { $0.event.recurrence != nil }) {
+                            Text("Repeating deadlines: all past occurrences and the next 12 months.").font(.caption).foregroundStyle(theme.muted).padding(.top, 12)
+                        }
+                    }.padding(.horizontal, 20).padding(.bottom, 24)
+                }.refreshable { await model.refresh() }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if selecting && !selected.isEmpty {
                 HStack {
                     Button("Mark complete") { confirmation = true }
                     Spacer()
                     Button("Reopen") { confirmation = false }
-                }.padding(.horizontal).frame(minHeight: 40).disabled(busy || !model.connected)
-            }
-            if let error { Text(error).font(.caption).foregroundStyle(Whale.warning).padding(.horizontal) }
-            if busy { ProgressView().accessibilityLabel("Updating selected deadlines") }
-            TimelineView(.periodic(from: .now, by: 30)) { timeline in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        if !model.deadlinesLoaded {
-                            Text("Connect to load the full deadline checklist.").foregroundStyle(Whale.muted)
-                        } else if displayed.isEmpty {
-                            Text("No \(filter == "All" ? "" : filter.lowercased() + " ")deadlines in this view.").foregroundStyle(Whale.muted)
-                        }
-                        let groups = sections(now: timeline.date)
-                        ForEach(groups, id: \.title) { section in
-                            Text(section.title).font(.subheadline.weight(.semibold))
-                                .foregroundStyle(section.title == "Overdue" ? Whale.warning : Whale.muted).padding(.top, 12)
-                            ForEach(section.items) { item in row(item, now: timeline.date) }
-                        }
-                        if visible.contains(where: { $0.event.recurrence != nil }) {
-                            Text("Repeating deadlines: all past occurrences and the next 12 months.").font(.caption).foregroundStyle(Whale.muted).padding(.top, 12)
-                        }
-                    }.padding(.horizontal).padding(.bottom, 24)
-                }.refreshable { await model.refresh() }
+                }.buttonStyle(.plain).font(.system(size: 14, weight: .medium))
+                    .padding(.horizontal, 20).frame(height: 52).background(theme.surface)
+                    .disabled(busy || !model.connected)
             }
         }
         .accessibilityElement(children: .contain).accessibilityIdentifier("Deadline checklist")
@@ -95,28 +105,36 @@ struct DeadlineChecklistView: View {
     }
     private func row(_ item: Occurrence, now: Date) -> some View {
         let calendar = model.calendar(item.event.calendarId)
-        let color = item.isComplete ? Whale.muted : Color(hex: calendar?.color ?? "#1d9bf0")
+        let color = item.isComplete ? theme.muted : Color(hex: calendar?.color ?? "#1d9bf0")
         return HStack(alignment: .top, spacing: 6) {
             Button {
                 if selecting { toggle(item) }
                 else { perform([item], completed: !item.isComplete) }
             } label: {
-                Image(systemName: selecting ? (selected.contains(item.id) ? "checkmark.circle.fill" : "circle") : (item.isComplete ? "checkmark.circle.fill" : "circle"))
-                    .font(.title3).foregroundStyle(selecting ? Whale.accent : color).frame(width: 44, height: 44)
+                let checked = selecting ? selected.contains(item.id) : item.isComplete
+                ZStack {
+                    RoundedRectangle(cornerRadius: 3).strokeBorder(checked ? theme.muted : theme.muted.opacity(0.5), lineWidth: 1)
+                    if checked { Image(systemName: "checkmark").font(.system(size: 10, weight: .medium)) }
+                }.frame(width: 17, height: 17).foregroundStyle(theme.muted).frame(width: 28, height: 44).contentShape(Rectangle())
             }.disabled(busy || (!selecting && !model.connected))
                 .accessibilityLabel(selecting ? "Select \(item.event.title)" : "\(item.isComplete ? "Reopen" : "Complete") \(item.event.title)")
                 .accessibilityIdentifier("Deadline check \(item.id)")
             Button { if selecting { toggle(item) } else { details = item } } label: {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(item.event.title).font(.body.weight(.medium)).strikethrough(item.isComplete)
-                        .foregroundStyle(item.isComplete ? Whale.muted : .white).fixedSize(horizontal: false, vertical: true)
-                    Text("\(DeadlineSchedule.dueLabel(item, now: now)) · \(item.event.startTime ?? "Date only")")
-                        .font(.subheadline).foregroundStyle(!item.isComplete && (item.isOverdue(at: now) || item.startDate == Dates.key(now)) ? Whale.warning : Whale.muted)
-                    Text("\(calendar?.name ?? "Calendar")\(item.event.recurrence == nil ? "" : " · Repeats")")
-                        .font(.caption).foregroundStyle(color)
-                }.padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    Text(item.event.title).font(.callout.weight(.medium)).strikethrough(item.isComplete)
+                        .foregroundStyle(item.isComplete ? theme.muted : theme.text).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 5) {
+                        let section = DeadlineSchedule.section(item, now: now)
+                        if section != "Today" && section != "Tomorrow" { Text(DeadlineSchedule.dueLabel(item, now: now)); Text("·") }
+                        if let time = item.event.startTime { Text(time).monospacedDigit(); Text("·") }
+                        Circle().fill(color.opacity(0.8)).frame(width: 5, height: 5)
+                        Text(calendar?.name ?? "Calendar")
+                        if item.event.recurrence != nil { Image(systemName: "repeat").font(.system(size: 10)) }
+                    }.font(.caption).foregroundStyle(theme.muted)
+                }.padding(.vertical, 11).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }.disabled(busy).accessibilityIdentifier("Deadline details \(item.id)")
-        }.buttonStyle(.plain)
+                .accessibilityLabel("\(item.event.title), \(DeadlineSchedule.dueLabel(item, now: now)), \(item.event.startTime ?? "Date only"), \(calendar?.name ?? "Calendar")")
+        }.buttonStyle(.plain).overlay(alignment: .bottom) { Rectangle().fill(theme.line).frame(height: 1).padding(.leading, 34) }
     }
     private func toggle(_ item: Occurrence) {
         if !selected.insert(item.id).inserted { selected.remove(item.id) }

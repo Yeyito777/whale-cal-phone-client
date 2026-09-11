@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CalendarHomeView: View {
+    @Environment(\.whaleTheme) private var theme
     @Bindable var model: CalendarConnectionModel
     @State private var mode = "Month"
     @State private var query = ""
@@ -20,31 +21,20 @@ struct CalendarHomeView: View {
                 header
                 if !model.connected || model.connectionError != nil {
                     HStack {
-                        Image(systemName: "wifi.slash")
-                        Text(model.connectionError == nil ? "Offline · showing last synced calendar" : "Connection needs attention")
+                        Text(model.connectionError == nil ? "Offline · saved calendar" : "Connection needs attention")
                         Spacer()
                         Button("Details") { showSettings = true }
-                    }.font(.caption).foregroundStyle(Whale.warning).padding(.horizontal).padding(.vertical, 8)
+                    }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(theme.muted).padding(.horizontal, 20).padding(.bottom, 8)
                 }
-                HStack(spacing: 8) {
-                    if mode != "Deadlines" {
-                        Button { move(-1) } label: { Image(systemName: "chevron.left").frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Previous \(mode.lowercased())")
-                    }
-                    Picker("View", selection: $mode) {
-                        ForEach(["Month", "Week", "Agenda", "Deadlines"], id: \.self) { Text($0) }
-                    }.pickerStyle(.segmented)
-                    if mode != "Deadlines" {
-                        Button { move(1) } label: { Image(systemName: "chevron.right").frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Next \(mode.lowercased())")
-                    }
-                }.padding(.horizontal, 12).padding(.bottom, 10)
+                WhaleViewTabs(selection: $mode).padding(.horizontal, 8).padding(.bottom, 8)
                 if showSearch {
                     HStack {
-                        Image(systemName: "magnifyingglass").foregroundStyle(Whale.muted)
+                        Image(systemName: "magnifyingglass").foregroundStyle(theme.muted)
                         TextField("Search this view", text: $query).font(.subheadline).focused($searchFocused)
                             .submitLabel(.search).onSubmit { searchFocused = false }
                         Button { closeSearch() } label: { Image(systemName: "xmark.circle.fill").frame(width: 32, height: 32) }.accessibilityLabel("Close search")
                     }.padding(.leading, 12).padding(.trailing, 4).padding(.vertical, 4)
-                        .background(Whale.surface, in: RoundedRectangle(cornerRadius: 8)).padding(.horizontal).padding(.bottom, 8)
+                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 8)).padding(.horizontal).padding(.bottom, 8)
                 }
                 if mode == "Deadlines" {
                     DeadlineChecklistView(model: model, query: query)
@@ -61,7 +51,7 @@ struct CalendarHomeView: View {
                 }
             }
             }
-            .background(Whale.background)
+            .background(theme.background)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showCalendarManager) { CalendarsView(model: model) }
             .sheet(isPresented: $showSettings) { ConnectionSettingsView(model: model) }
@@ -78,26 +68,28 @@ struct CalendarHomeView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(mode == "Deadlines" ? "Deadlines" : model.selectedDate.formatted(.dateTime.month(.wide))).font(.system(size: 28, weight: .semibold))
+        HStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(mode == "Deadlines" ? "Deadlines" : model.selectedDate.formatted(.dateTime.month(.wide))).font(.system(size: 23, weight: .medium))
                     .lineLimit(1).minimumScaleFactor(0.8).accessibilityIdentifier("Month heading")
-                if mode != "Deadlines" { Text(model.selectedDate.formatted(.dateTime.year())).font(.subheadline).foregroundStyle(Whale.muted) }
+                if mode != "Deadlines" { Text(model.selectedDate.formatted(.dateTime.year())).font(.system(size: 12)).foregroundStyle(theme.muted) }
             }
-            Spacer(minLength: 0)
             if mode != "Deadlines" {
-                Button { model.selectedDate = Date() } label: { Text("Today").font(.subheadline).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
+                Button { move(-1) } label: { Image(systemName: "chevron.left").font(.system(size: 12)).frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Previous \(mode.lowercased())")
+                Button { move(1) } label: { Image(systemName: "chevron.right").font(.system(size: 12)).frame(width: 32, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Next \(mode.lowercased())")
             }
-            Button { showNew = true } label: { Image(systemName: "plus").font(.title3).frame(width: 44, height: 44).contentShape(Rectangle()) }.disabled(!model.connected).accessibilityLabel(mode == "Deadlines" ? "New deadline" : "New event")
+            Spacer(minLength: 4)
+            Button { showNew = true } label: { Image(systemName: "plus").font(.system(size: 20, weight: .regular)).frame(width: 40, height: 44).contentShape(Rectangle()) }.disabled(!model.connected).accessibilityLabel(mode == "Deadlines" ? "New deadline" : "New event")
             Menu {
                 Button { showCalendars = true } label: { Label("Calendars", systemImage: "calendar") }
+                Button("Today") { model.selectedDate = Date() }
                 Button {
                     if showSearch { closeSearch() } else { showSearch = true }
                 } label: { Label(showSearch ? "Hide search" : "Search", systemImage: "magnifyingglass") }
                 Divider()
                 Button { showSettings = true } label: { Label("Connection", systemImage: "gearshape") }.accessibilityIdentifier("Connection settings")
-            } label: { Image(systemName: "ellipsis").font(.title3).frame(width: 44, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Calendar options")
-        }.padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 14)
+            } label: { Image(systemName: "ellipsis").font(.system(size: 18)).frame(width: 36, height: 44).contentShape(Rectangle()) }.accessibilityLabel("Calendar options")
+        }.buttonStyle(.plain).foregroundStyle(theme.text).padding(.leading, 20).padding(.trailing, 12).padding(.top, 4).padding(.bottom, 6)
     }
     private func closeSearch() {
         query = ""
@@ -114,7 +106,7 @@ struct CalendarHomeView: View {
         VStack(spacing: 4) {
             HStack(spacing: 0) {
                 ForEach(["M", "T", "W", "T", "F", "S", "S"].indices, id: \.self) { i in
-                    Text(["M", "T", "W", "T", "F", "S", "S"][i]).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(Whale.muted).frame(maxWidth: .infinity)
+                    Text(["M", "T", "W", "T", "F", "S", "S"][i]).font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(theme.muted).frame(maxWidth: .infinity)
                 }
             }.padding(.bottom, 4)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 7), spacing: 4) {
@@ -132,9 +124,9 @@ struct CalendarHomeView: View {
         } label: {
             VStack(spacing: 7) {
                 Text("\(Dates.calendar.component(.day, from: day))")
-                    .font(.system(size: 15, weight: selected || today ? .bold : .regular, design: .monospaced))
-                    .foregroundStyle(today ? Color.white : inMonth ? Color.white : Whale.muted.opacity(0.45))
-                    .frame(width: 29, height: 27).background(today ? Whale.accent : .clear, in: RoundedRectangle(cornerRadius: 7))
+                    .font(.system(size: 15, weight: selected || today ? .semibold : .regular))
+                    .foregroundStyle(today ? theme.text : inMonth ? theme.text : theme.muted.opacity(0.45))
+                    .frame(width: 29, height: 27)
                 HStack(spacing: 3) {
                     ForEach(Array(items.prefix(3))) { item in
                         if item.event.isDeadline {
@@ -146,22 +138,27 @@ struct CalendarHomeView: View {
                     if items.count > 3 { Text("+").font(.system(size: 8)) }
                 }.frame(height: 5)
             }.frame(maxWidth: .infinity).padding(.vertical, 7)
-                .background(selected ? Whale.surface : .clear, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? Whale.accent.opacity(0.55) : .clear))
+                .background(selected ? theme.selection : .clear, in: RoundedRectangle(cornerRadius: 4))
+                .overlay(alignment: .bottom) { if today { Rectangle().fill(theme.accent).frame(width: 14, height: 2) } }
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
             .accessibilityLabel("\(day.formatted(date: .complete, time: .omitted)), \(items.count) items\(selected ? ", selected" : "")")
     }
     private var selectedDay: some View {
         VStack(alignment: .leading, spacing: 10) {
+            HStack {
             Button { showDay = true } label: {
                 HStack {
-                    Text(model.selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated))).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(Whale.muted)
+                    Text(model.selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated))).font(.subheadline.weight(.semibold)).foregroundStyle(theme.text)
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(theme.muted)
                 }
                 .frame(minHeight: 44).contentShape(Rectangle())
             }.accessibilityIdentifier("Day details").accessibilityHint("Open day schedule")
+            Spacer()
+            if Dates.key(model.selectedDate) != Dates.key(Date()) {
+                Button("Today") { model.selectedDate = Date() }.font(.system(size: 12)).foregroundStyle(theme.muted).frame(minWidth: 44, minHeight: 44)
+            }
+            }.buttonStyle(.plain)
             let day = Dates.key(model.selectedDate)
             if day < model.loadedFrom || day > model.loadedTo {
                 emptyDay(model.selectedDate)
@@ -184,7 +181,7 @@ struct CalendarHomeView: View {
                 let date = Dates.add(offset, to: model.selectedDate)
                 let items = model.items(on: date, query: query)
                 if !items.isEmpty {
-                    Text(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundStyle(Whale.muted)
+                    Text(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundStyle(theme.muted)
                     ForEach(items) { item in
                         Button { selectedItem = item } label: { EventRow(item: item, calendar: model.calendar(item.event.calendarId)) }.buttonStyle(.plain)
                     }
@@ -197,8 +194,7 @@ struct CalendarHomeView: View {
         let key = Dates.key(date)
         let cached = key >= model.loadedFrom && key <= model.loadedTo
         return VStack(spacing: 8) {
-            Image(systemName: cached ? "sun.horizon" : "arrow.triangle.2.circlepath").font(.title2).foregroundStyle(Whale.accent)
-            Text(!cached ? (model.connected ? "Loading calendar…" : "This date isn’t cached") : query.isEmpty ? "A little room to breathe." : "No matching items.").font(.subheadline).foregroundStyle(Whale.muted)
+            Text(!cached ? (model.connected ? "Loading calendar…" : "This date isn’t cached") : query.isEmpty ? "No events" : "No matching items").font(.subheadline).foregroundStyle(theme.muted)
         }.frame(maxWidth: .infinity).padding(.vertical, 24)
     }
 }
